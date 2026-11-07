@@ -1,0 +1,14 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <Preferences.h>
+// Phase 1 Wi-Fi web remote. Display/audio drivers not yet integrated.
+WebServer server(80);
+Preferences prefs;
+String app="home";
+int chapter=1, volume=60;
+bool playing=false;
+const char page[] PROGMEM=R"HTML(<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>RLCD Smart Hub</title><style>body{font:16px system-ui;background:#152033;color:white;padding:20px}button{margin:5px;padding:12px;background:#345;color:white;border:1px solid #789;border-radius:8px}</style></head><body><h2>RLCD Smart Hub V1 — Phase 1</h2><p>Wi-Fi remote control prototype (no LCD or audio yet)</p><div id="apps"></div><h3 id="app"></h3><p id="status"></p><button onclick="change('chapter',state.chapter-1)">Previous chapter</button><button onclick="change('chapter',state.chapter+1)">Next chapter</button><button onclick="change('playing',!state.playing)">Play/Pause flag</button><p>Volume <input type="range" min="0" max="100" onchange="change('volume',this.value)"></p><script>const names=['home','bible','radio','music','verses','weather','clock','worship','smarthome','games','wifi','settings'];let state={chapter:1,playing:false};async function change(k,v){await fetch('/set?'+new URLSearchParams({[k]:v}));refresh()}async function refresh(){state=await(await fetch('/status')).json();document.getElementById('app').textContent=state.app;document.getElementById('status').textContent='Chapter '+state.chapter+' / volume '+state.volume+' / playing '+state.playing}document.getElementById('apps').innerHTML=names.map(x=>'<button onclick="change(\'app\',\''+x+'\')">'+x+'</button>').join('');refresh()</script></body></html>)HTML";
+void status(){server.send(200,"application/json","{\"app\":\""+app+"\",\"chapter\":"+String(chapter)+",\"volume\":"+String(volume)+",\"playing\":"+(playing?"true":"false")+"}");}
+void setState(){if(server.hasArg("app")){String a=server.arg("app");const char* names[]={"home","bible","radio","music","verses","weather","clock","worship","smarthome","games","wifi","settings"};for(const char* n:names)if(a==n)app=a;}if(server.hasArg("chapter"))chapter=constrain(server.arg("chapter").toInt(),1,50);if(server.hasArg("volume"))volume=constrain(server.arg("volume").toInt(),0,100);if(server.hasArg("playing"))playing=server.arg("playing")=="true";prefs.putString("app",app);prefs.putInt("chapter",chapter);prefs.putInt("volume",volume);status();}
+void setup(){Serial.begin(115200);prefs.begin("hub",false);app=prefs.getString("app","home");chapter=prefs.getInt("chapter",1);volume=prefs.getInt("volume",60);WiFi.mode(WIFI_AP);WiFi.softAP("RLCD-SmartHub","SmartHub42");server.on("/",[](){server.send_P(200,"text/html",page);});server.on("/status",status);server.on("/set",setState);server.begin();}
+void loop(){server.handleClient();delay(2);}
